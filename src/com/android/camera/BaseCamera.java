@@ -50,7 +50,7 @@ public abstract class BaseCamera extends NoSearchActivity
     private PreviewFrameLayout mPreviewFrameLayout;
     private Rect mPreviewRect;
 
-    protected boolean mPreviewing;
+    protected boolean mPreviewing = false;
     protected boolean mPausing;
 
     protected static final int FOCUS_NOT_STARTED = 0;
@@ -152,9 +152,8 @@ public abstract class BaseCamera extends NoSearchActivity
 
         @Override
         public boolean onSingleTapConfirmed(MotionEvent e) {
-
-            if (mPausing || !mPreviewing || mHeadUpDisplay == null || mPreviewRect == null
-                    || mFocusState != FOCUS_NOT_STARTED || mHeadUpDisplay.isActive()
+            if (mPausing || !mPreviewing || mPreviewRect == null
+                    || mFocusState != FOCUS_NOT_STARTED
                     || !CameraSettings.FOCUS_MODE_TOUCH.equals(mFocusMode)) {
                 return false;
             }
@@ -189,12 +188,12 @@ public abstract class BaseCamera extends NoSearchActivity
             mCameraDevice.autoFocus(new android.hardware.Camera.AutoFocusCallback() {
                 @Override
                 public void onAutoFocus(boolean success, android.hardware.Camera camera) {
-                    if (mFocusState == FOCUSING) {
-                        if (success) mFocusRectangle.showSuccess();
-                        else mFocusRectangle.showFail();
+                        if (success)
+                            mFocusRectangle.showSuccess();
+                        else 
+                            mFocusRectangle.showFail();
                         mFocusState = FOCUS_NOT_STARTED;
                     }
-                }
             });
             return true;
         }
@@ -252,7 +251,6 @@ public abstract class BaseCamera extends NoSearchActivity
 	    /* use center point */
             mParameters.set(paramName, focusRect.centerX() + "," + focusRect.centerY());
         }
-
         mCameraDevice.setParameters(mParameters);
     }
 

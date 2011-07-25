@@ -337,14 +337,17 @@ public class Camera extends BaseCamera implements View.OnClickListener,
         initializeZoom();
         mHeadUpDisplay = new CameraHeadUpDisplay(this);
         mHeadUpDisplay.setListener(new MyHeadUpDisplayListener());
+        mHeadUpDisplay.setEnabled(false);
         initializeHeadUpDisplay();
         initializeTouchFocus();
         clearFocusState();
         resetFocusIndicator();
 
         mFirstTimeInitialized = true;
+        mHeadUpDisplay.setEnabled(true);
         changeHeadUpDisplayState();
         addIdleHandler();
+        
     }
 
     private void addIdleHandler() {

@@ -42,6 +42,7 @@ import android.hardware.Camera.Size;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
 import android.media.ThumbnailUtils;
+import android.media.ToneGenerator;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -87,10 +88,10 @@ import java.util.List;
  * The Camcorder activity.
  */
 public class VideoCamera extends BaseCamera
-        implements View.OnClickListener,
-        ShutterButton.OnShutterButtonListener, SurfaceHolder.Callback,
-        MediaRecorder.OnErrorListener, MediaRecorder.OnInfoListener,
-        Switcher.OnSwitchListener {
+implements View.OnClickListener,
+ShutterButton.OnShutterButtonListener, SurfaceHolder.Callback,
+MediaRecorder.OnErrorListener, MediaRecorder.OnInfoListener,
+Switcher.OnSwitchListener {
 
     private static final String TAG = "videocamera";
 
@@ -119,6 +120,7 @@ public class VideoCamera extends BaseCamera
     private static final long SHUTTER_BUTTON_TIMEOUT = 500L; // 500ms
 
     private int mZoomValue;  // The current zoom value.
+    private int mFocusValue = 50;  // The current focus value.
     private int mZoomMax;
     private GestureDetector mGestureDetector;
     private final ZoomListener mZoomListener = new ZoomListener();
@@ -129,7 +131,7 @@ public class VideoCamera extends BaseCamera
      * TODO: consider publishing by moving into MediaStore.
      */
     private final static String EXTRA_QUICK_CAPTURE =
-            "android.intent.extra.quickCapture";
+        "android.intent.extra.quickCapture";
 
     private PreviewFrameLayout mPreviewFrameLayout;
     private SurfaceView mVideoPreview;
@@ -168,7 +170,6 @@ public class VideoCamera extends BaseCamera
     private int mMaxVideoDurationInMs;
 
     boolean mPausing = false;
-    boolean mPreviewing = false; // True if preview is started.
 
     private ContentResolver mContentResolver;
 
@@ -195,6 +196,10 @@ public class VideoCamera extends BaseCamera
     private int mOrientationHint; // the orientation hint for video playback
     private SharedPreferences prefs;
 
+    // indicate if video zoom is supported for the current settings
+    // for general zoom support check mParameters.isZoomSupported()
+    private boolean mZoomSupported = false;
+
     // This Handler is used to post message back onto the main thread of the
     // application
     private class MainHandler extends Handler {
@@ -202,24 +207,24 @@ public class VideoCamera extends BaseCamera
         public void handleMessage(Message msg) {
             switch (msg.what) {
 
-                case ENABLE_SHUTTER_BUTTON:
-                    mShutterButton.setEnabled(true);
-                    break;
+            case ENABLE_SHUTTER_BUTTON:
+                mShutterButton.setEnabled(true);
+                break;
 
-                case CLEAR_SCREEN_DELAY: {
-                    getWindow().clearFlags(
-                            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                    break;
-                }
+            case CLEAR_SCREEN_DELAY: {
+                getWindow().clearFlags(
+                        WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                break;
+            }
 
-                case UPDATE_RECORD_TIME: {
-                    updateRecordingTime();
-                    break;
-                }
+            case UPDATE_RECORD_TIME: {
+                updateRecordingTime();
+                break;
+            }
 
-                default:
-                    Log.v(TAG, "Unhandled message: " + msg.what);
-                    break;
+            default:
+                Log.v(TAG, "Unhandled message: " + msg.what);
+                break;
             }
         }
     }
@@ -331,7 +336,7 @@ public class VideoCamera extends BaseCamera
         setContentView(R.layout.video_camera);
 
         mPreviewFrameLayout = (PreviewFrameLayout)
-                findViewById(R.id.frame_layout);
+        findViewById(R.id.frame_layout);
         resizeForPreviewAspectRatio();
 
         mVideoPreview = (SurfaceView) findViewById(R.id.camera_preview);
@@ -355,7 +360,7 @@ public class VideoCamera extends BaseCamera
             View controlBar = inflater.inflate(
                     R.layout.camera_control, rootView);
             mLastPictureButton =
-                    (ImageView) controlBar.findViewById(R.id.review_thumbnail);
+                (ImageView) controlBar.findViewById(R.id.review_thumbnail);
             mThumbController = new ThumbnailController(
                     getResources(), mLastPictureButton, mContentResolver);
             mLastPictureButton.setOnClickListener(this);
@@ -368,7 +373,7 @@ public class VideoCamera extends BaseCamera
                     R.layout.attach_camera_control, rootView);
             controlBar.findViewById(R.id.btn_cancel).setOnClickListener(this);
             ImageView retake =
-                    (ImageView) controlBar.findViewById(R.id.btn_retake);
+                (ImageView) controlBar.findViewById(R.id.btn_retake);
             retake.setOnClickListener(this);
             retake.setImageResource(R.drawable.btn_ic_review_retake_video);
             controlBar.findViewById(R.id.btn_play).setOnClickListener(this);
@@ -390,7 +395,27 @@ public class VideoCamera extends BaseCamera
                 return;
             }
         } catch (InterruptedException ex) {
-            // ignore
+           
+        }
+        
+        try {
+            startPreviewThread.join();
+            if (mStartPreviewFail) {
+                showCameraErrorAndFinish();
+                return;
+            }
+        } catch (InterruptedException ex) {
+           
+        }
+        
+        try {
+            startPreviewThread.join();
+            if (mStartPreviewFail) {
+                showCameraErrorAndFinish();
+                return;
+            }
+        } catch (InterruptedException ex) {
+           
         }
 
         initializeZoom();
@@ -400,6 +425,30 @@ public class VideoCamera extends BaseCamera
         mHeadUpDisplay = new CamcorderHeadUpDisplay(this);
         mHeadUpDisplay.setListener(new MyHeadUpDisplayListener());
         initializeHeadUpDisplay();
+        //LEJAY: Adding stuff here
+        mFocusRectangle = (FocusRectangle) findViewById(R.id.focus_rectangle);
+        updateFocusIndicator();
+        initializeTouchFocus();
+        clearFocusState();
+        resetFocusIndicator();
+     //   setCameraParameters();
+    }
+    private void clearFocusState() {
+        mFocusState = FOCUS_NOT_STARTED;
+        updateFocusIndicator();
+    }
+    private void updateFocusIndicator() { //LEJAY: Adding focus indicator control
+        if (mFocusRectangle == null) return;
+
+        if (mFocusState == FOCUSING || mFocusState == FOCUSING_SNAP_ON_FINISH) {
+            mFocusRectangle.showStart();
+        } else if (mFocusState == FOCUS_SUCCESS) {
+            mFocusRectangle.showSuccess();
+        } else if (mFocusState == FOCUS_FAIL) {
+            mFocusRectangle.showFail();
+        } else {
+            mFocusRectangle.clear();
+        }
     }
 
     private void changeHeadUpDisplayState() {
@@ -422,17 +471,17 @@ public class VideoCamera extends BaseCamera
                 CameraHolder.instance().getCameraInfo(), mCameraId);
 
         PreferenceGroup group =
-                settings.getPreferenceGroup(R.xml.video_preferences);
+            settings.getPreferenceGroup(R.xml.video_preferences);
         if (mIsVideoCaptureIntent) {
             group = filterPreferenceScreenByIntent(group);
         }
 
-        boolean zoomSupported = CameraSettings.isVideoZoomSupported(this, mCameraId, mParameters);
+        mZoomSupported = CameraSettings.isVideoZoomSupported(this, mCameraId, mParameters);
         mHeadUpDisplay.initialize(this, group,
-                zoomSupported ? getZoomRatios() : null,
-                mOrientationCompensation, mParameters);
+                mZoomSupported ? getZoomRatios() : null,
+                        mOrientationCompensation, mParameters);
 
-        if (zoomSupported) {
+        if (mZoomSupported) {
             mHeadUpDisplay.setZoomListener(new ZoomControllerListener() {
                 public void onZoomChanged(
                         int index, float ratio, boolean isMoving) {
@@ -466,7 +515,7 @@ public class VideoCamera extends BaseCamera
     }
 
     private class MyOrientationEventListener
-            extends OrientationEventListener {
+    extends OrientationEventListener {
         public MyOrientationEventListener(Context context) {
             super(context);
         }
@@ -482,7 +531,7 @@ public class VideoCamera extends BaseCamera
             // When the screen is unlocked, display rotation may change. Always
             // calculate the up-to-date orientationCompensation.
             int orientationCompensation = mOrientation
-                    + Util.getDisplayRotation(VideoCamera.this);
+            + Util.getDisplayRotation(VideoCamera.this);
             if (mOrientationCompensation != orientationCompensation) {
                 mOrientationCompensation = orientationCompensation;
                 if (!mIsVideoCaptureIntent) {
@@ -521,22 +570,22 @@ public class VideoCamera extends BaseCamera
 
     public void onClick(View v) {
         switch (v.getId()) {
-            case R.id.btn_retake:
-                deleteCurrentVideo();
-                hideAlert();
-                break;
-            case R.id.btn_play:
-                startPlayVideoActivity();
-                break;
-            case R.id.btn_done:
-                doReturnToCaller(true);
-                break;
-            case R.id.btn_cancel:
-                stopVideoRecordingAndReturn(false);
-                break;
-            case R.id.review_thumbnail:
-                if (!mMediaRecorderRecording) viewLastVideo();
-                break;
+        case R.id.btn_retake:
+            deleteCurrentVideo();
+            hideAlert();
+            break;
+        case R.id.btn_play:
+            startPlayVideoActivity();
+            break;
+        case R.id.btn_done:
+            doReturnToCaller(true);
+            break;
+        case R.id.btn_cancel:
+            stopVideoRecordingAndReturn(false);
+            break;
+        case R.id.review_thumbnail:
+            if (!mMediaRecorderRecording) viewLastVideo();
+            break;
         }
     }
 
@@ -558,18 +607,18 @@ public class VideoCamera extends BaseCamera
 
     public void onShutterButtonClick(ShutterButton button) {
         switch (button.getId()) {
-            case R.id.shutter_button:
-                if (mHeadUpDisplay.collapse()) return;
+        case R.id.shutter_button:
+            if (mHeadUpDisplay.collapse()) return;
 
-                if (mMediaRecorderRecording) {
-                    onStopVideoRecording(true);
-                } else {
-                    startVideoRecording();
-                }
-                mShutterButton.setEnabled(false);
-                mHandler.sendEmptyMessageDelayed(
-                        ENABLE_SHUTTER_BUTTON, SHUTTER_BUTTON_TIMEOUT);
-                break;
+            if (mMediaRecorderRecording) {
+                onStopVideoRecording(true);
+            } else {
+                startVideoRecording();
+            }
+            mShutterButton.setEnabled(false);
+            mHandler.sendEmptyMessageDelayed(
+                    ENABLE_SHUTTER_BUTTON, SHUTTER_BUTTON_TIMEOUT);
+            break;
         }
     }
 
@@ -583,15 +632,15 @@ public class VideoCamera extends BaseCamera
     private void showStorageHint() {
         String errorMessage = null;
         switch (mStorageStatus) {
-            case STORAGE_STATUS_NONE:
-                errorMessage = getString(R.string.no_storage);
-                break;
-            case STORAGE_STATUS_LOW:
-                errorMessage = getString(R.string.spaceIsLow_content);
-                break;
-            case STORAGE_STATUS_FAIL:
-                errorMessage = getString(R.string.access_sd_fail);
-                break;
+        case STORAGE_STATUS_NONE:
+            errorMessage = getString(R.string.no_storage);
+            break;
+        case STORAGE_STATUS_LOW:
+            errorMessage = getString(R.string.spaceIsLow_content);
+            break;
+        case STORAGE_STATUS_FAIL:
+            errorMessage = getString(R.string.access_sd_fail);
+            break;
         }
         if (errorMessage != null) {
             if (mStorageHint == null) {
@@ -614,7 +663,7 @@ public class VideoCamera extends BaseCamera
             return STORAGE_STATUS_FAIL;
         }
         return remaining < LOW_STORAGE_THRESHOLD
-                ? STORAGE_STATUS_LOW
+        ? STORAGE_STATUS_LOW
                 : STORAGE_STATUS_OK;
     }
 
@@ -629,7 +678,7 @@ public class VideoCamera extends BaseCamera
         Intent intent = getIntent();
         if (intent.hasExtra(MediaStore.EXTRA_VIDEO_QUALITY)) {
             videoQuality =
-                    intent.getIntExtra(MediaStore.EXTRA_VIDEO_QUALITY, 0);
+                intent.getIntExtra(MediaStore.EXTRA_VIDEO_QUALITY, 0);
             if (videoQuality < CamcorderProfile.QUALITY_LOW ||
                     videoQuality > CamcorderProfile.QUALITY_HD) {
                 videoQuality = CamcorderProfile.QUALITY_HIGH;
@@ -646,11 +695,11 @@ public class VideoCamera extends BaseCamera
         // unless it is specified in the intent.
         if (intent.hasExtra(MediaStore.EXTRA_DURATION_LIMIT)) {
             int seconds =
-                    intent.getIntExtra(MediaStore.EXTRA_DURATION_LIMIT, 0);
+                intent.getIntExtra(MediaStore.EXTRA_DURATION_LIMIT, 0);
             mMaxVideoDurationInMs = 1000 * seconds;
         } else {
             mMaxVideoDurationInMs =
-                    CameraSettings.getVidoeDurationInMillis(quality);
+                CameraSettings.getVidoeDurationInMillis(quality);
         }
         mProfile = CamcorderProfile.get(mCameraId, videoQuality);
     }
@@ -678,7 +727,7 @@ public class VideoCamera extends BaseCamera
 
         // install an intent filter to receive SD card related events.
         IntentFilter intentFilter =
-                new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
+            new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
         intentFilter.addAction(Intent.ACTION_MEDIA_EJECT);
         intentFilter.addAction(Intent.ACTION_MEDIA_UNMOUNTED);
         intentFilter.addAction(Intent.ACTION_MEDIA_SCANNER_STARTED);
@@ -818,69 +867,81 @@ public class VideoCamera extends BaseCamera
             return true;
         }
 
-        SharedPreferences prefs = getSharedPreferences("com.android.camera_preferences", 0);
-        boolean volZoom = prefs.getBoolean("vol_zoom_enabled", false);
         switch (keyCode) {
-            case KeyEvent.KEYCODE_CAMERA:
-                if (event.getRepeatCount() == 0) {
-                    mShutterButton.performClick();
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_DPAD_CENTER:
-                if (event.getRepeatCount() == 0) {
-                    mShutterButton.performClick();
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_MENU:
-                if (mMediaRecorderRecording) {
-                    onStopVideoRecording(true);
-                    return true;
-                }
-                break;
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-                if (volZoom) {
+        case KeyEvent.KEYCODE_CAMERA:
+            if (event.getRepeatCount() == 0) {
+                mShutterButton.performClick();
+                return true;
+            }
+            break;
+        case KeyEvent.KEYCODE_DPAD_CENTER:
+            if (event.getRepeatCount() == 0) {
+                mShutterButton.performClick();
+                return true;
+            }
+            break;
+        case KeyEvent.KEYCODE_MENU:
+            if (mMediaRecorderRecording) {
+                onStopVideoRecording(true);
+                return true;
+            }
+            break;
+        case KeyEvent.KEYCODE_VOLUME_UP:
+        case KeyEvent.KEYCODE_VOLUME_DOWN:
+            if (prefs.getBoolean("vol_zoom_enabled", false) && !mMediaRecorderRecording) {
+                if (mZoomSupported) {
                     if (keyCode == KeyEvent.KEYCODE_VOLUME_UP && mZoomValue < mZoomMax) {
-                        mZoomValue ++;
+                        mZoomValue++;
+                        onZoomValueChanged(mZoomValue);
+                        mHeadUpDisplay.setZoomIndex(mZoomValue);
                     }
                     else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && mZoomValue > 0) {
                         mZoomValue--;
+                        onZoomValueChanged(mZoomValue);
+                        mHeadUpDisplay.setZoomIndex(mZoomValue);
                     }
-                    onZoomValueChanged(mZoomValue);
-                    mHeadUpDisplay.setZoomIndex(mZoomValue);
-                    return true;
                 }
-                break;
+                return true;
+            } else if (prefs.getBoolean("vol_focus_enabled", false) && !mMediaRecorderRecording) { //LEJAY: Enable Focus
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                    mFocusValue = Math.min(100, mFocusValue + 5);
+                }
+                else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                    mFocusValue = Math.max(0, mFocusValue - 5);
+                }
+                onFocusValueChanged(mFocusValue);
+                return true;
+            }
+            break;
         }
 
         return super.onKeyDown(keyCode, event);
     }
 
+    private void onFocusValueChanged(int mFocusValue) {
+        mParameters.set("focus-mode", "manual");
+        mParameters.set("nv-manual-focus", mFocusValue);
+        setCameraHardwareParameters();
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
-        SharedPreferences prefs = getSharedPreferences("com.android.camera_preferences", 0);
-        boolean volZoom = prefs.getBoolean("vol_zoom_enabled", false);
         switch (keyCode) {
-            case KeyEvent.KEYCODE_CAMERA:
-                mShutterButton.setPressed(false);
-                return true;
-            case KeyEvent.KEYCODE_VOLUME_UP:
-            case KeyEvent.KEYCODE_VOLUME_DOWN:
-                if (volZoom || mMediaRecorderRecording) {
-                    return true;
+        case KeyEvent.KEYCODE_CAMERA:
+            mShutterButton.setPressed(false);
+            return true;
+        case KeyEvent.KEYCODE_VOLUME_UP:
+        case KeyEvent.KEYCODE_VOLUME_DOWN:
+            break;
+        case KeyEvent.KEYCODE_POWER:
+            if (powerShutter(prefs)){
+                if (mMediaRecorderRecording){
+                    onStopVideoRecording(true);
+                }else{
+                    startVideoRecording();
                 }
-                break;
-            case KeyEvent.KEYCODE_POWER:
-                if (powerShutter(prefs)){
-                    if (mMediaRecorderRecording){
-                        onStopVideoRecording(true);
-                    }else{
-                        startVideoRecording();
-                    }
-                }
-                return true;
+            }
+            return true;
         }
         return super.onKeyUp(keyCode, event);
     }
@@ -972,10 +1033,10 @@ public class VideoCamera extends BaseCamera
                 return NO_STORAGE_ERROR;
             } else {
                 String storageDirectory =
-                        Environment.getExternalStorageDirectory().toString();
+                    Environment.getExternalStorageDirectory().toString();
                 StatFs stat = new StatFs(storageDirectory);
                 return (long) stat.getAvailableBlocks()
-                        * (long) stat.getBlockSize();
+                * (long) stat.getBlockSize();
             }
         } catch (Exception ex) {
             // if we can't stat the filesystem then we don't know how many
@@ -996,7 +1057,6 @@ public class VideoCamera extends BaseCamera
         }
     }
 
-    private android.hardware.Camera mCameraDevice;
 
     // Prepares media recorder.
     private void initializeRecorder() {
@@ -1018,7 +1078,7 @@ public class VideoCamera extends BaseCamera
             if (saveUri != null) {
                 try {
                     mVideoFileDescriptor =
-                            mContentResolver.openFileDescriptor(saveUri, "rw");
+                        mContentResolver.openFileDescriptor(saveUri, "rw");
                     mCurrentVideoUri = saveUri;
                 } catch (java.io.FileNotFoundException ex) {
                     // invalid uri
@@ -1121,7 +1181,7 @@ public class VideoCamera extends BaseCamera
         long dateTaken = System.currentTimeMillis();
         String title = createName(dateTaken);
         String filename = title + 
-            (MediaRecorder.OutputFormat.MPEG_4 == mProfile.fileFormat ? ".m4v" : ".3gp"); // Used when emailing.
+        (MediaRecorder.OutputFormat.MPEG_4 == mProfile.fileFormat ? ".m4v" : ".3gp"); // Used when emailing.
         String cameraDirPath = ImageManager.CAMERA_IMAGE_BUCKET_NAME;
         String filePath = cameraDirPath + "/" + filename;
         File cameraDir = new File(cameraDirPath);
@@ -1188,26 +1248,43 @@ public class VideoCamera extends BaseCamera
                 MenuHelper.POSITION_GOTO_GALLERY,
                 R.string.camera_gallery_photos_text)
                 .setOnMenuItemClickListener(
-                    new OnMenuItemClickListener() {
-                        public boolean onMenuItemClick(MenuItem item) {
-                            gotoGallery();
-                            return true;
-                        }
-                    });
+                        new OnMenuItemClickListener() {
+                            public boolean onMenuItemClick(MenuItem item) {
+                                gotoGallery();
+                                return true;
+                            }
+                        });
         gallery.setIcon(android.R.drawable.ic_menu_gallery);
         mGalleryItems.add(gallery);
+        //LEJAY: Adding advanced tab for video camera
+        MenuItem mCameraSettings = menu.add(Menu.NONE, Menu.NONE,
+                MenuHelper.POSITION_CAMERA_SETTINGS,
+                R.string.advanced_options_label)
+                .setOnMenuItemClickListener(new OnMenuItemClickListener() {
+                    public boolean onMenuItemClick(MenuItem item) {
+                        gotoVideoCameraSettings();
+                        return true;
+                    }
+                });
+        mCameraSettings.setIcon(android.R.drawable.ic_menu_preferences);
+        mGalleryItems.add(mCameraSettings);
 
         if (mNumberOfCameras > 1) {
             menu.add(Menu.NONE, Menu.NONE,
                     MenuHelper.POSITION_SWITCH_CAMERA_ID,
                     R.string.switch_camera_id)
                     .setOnMenuItemClickListener(new OnMenuItemClickListener() {
-                public boolean onMenuItemClick(MenuItem item) {
-                    switchCameraId((mCameraId + 1) % mNumberOfCameras);
-                    return true;
-                }
-            }).setIcon(android.R.drawable.ic_menu_camera);
+                        public boolean onMenuItemClick(MenuItem item) {
+                            switchCameraId((mCameraId + 1) % mNumberOfCameras);
+                            return true;
+                        }
+                    }).setIcon(android.R.drawable.ic_menu_camera);
         }
+    }
+
+    private void gotoVideoCameraSettings() {
+        Intent intent = new Intent(this, AdvancedSettings.class); //LEJAY: Just using the same settings panel as for the Camera
+        startActivity(intent); 
     }
 
     private void switchCameraId(int cameraId) {
@@ -1275,7 +1352,7 @@ public class VideoCamera extends BaseCamera
 
             // Show the toast.
             Toast.makeText(VideoCamera.this, R.string.video_reach_size_limit,
-                           Toast.LENGTH_LONG).show();
+                    Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1291,8 +1368,21 @@ public class VideoCamera extends BaseCamera
 
         sendBroadcast(i);
     }
-
     private void startVideoRecording() {
+        if (mFocusState == FOCUSING) return; 
+        if (mFocusMode.equals(Parameters.FOCUS_MODE_AUTO)) { //LEJAY: Autofocus enabled?
+                // mHeadUpDisplay.setEnabled(false);
+                Log.v(TAG, "Start autofocus.");
+                mFocusStartTime = System.currentTimeMillis();
+                mFocusState = FOCUSING;
+               // updateFocusIndicator(); LEJAY: Doesnt work right
+                mCameraDevice.autoFocus(new AutoFocusCallback());
+        } else {
+            startVideoRecording_for_real();
+        }
+    }
+
+    private void startVideoRecording_for_real() {
         Log.v(TAG, "startVideoRecording");
         if (mStorageStatus != STORAGE_STATUS_OK) {
             Log.v(TAG, "Storage issue, ignore the start request");
@@ -1301,7 +1391,6 @@ public class VideoCamera extends BaseCamera
 
         CameraSettings.setContinuousAf(mParameters, true);
         setCameraHardwareParameters();
-
         initializeRecorder();
         if (mMediaRecorder == null) {
             Log.e(TAG, "Fail to initialize media recorder");
@@ -1329,12 +1418,32 @@ public class VideoCamera extends BaseCamera
         mRecordingTimeView.setVisibility(View.VISIBLE);
         updateRecordingTime();
         keepScreenOn();
+        clearFocusState(); //LEJAY Focus indicator clearing
+    }
+    private long mFocusStartTime;
+    private long mFocusCallbackTime;
+    public long mAutoFocusTime;
+
+    private final class AutoFocusCallback
+    implements android.hardware.Camera.AutoFocusCallback {
+        public void onAutoFocus(
+                boolean focused, android.hardware.Camera camera) {
+            mFocusCallbackTime = System.currentTimeMillis();
+            mAutoFocusTime = mFocusCallbackTime - mFocusStartTime;
+            Log.e(TAG, "<PROFILE> mAutoFocusTime = " + mAutoFocusTime + "ms");
+
+            if (focused) {
+                startVideoRecording_for_real();
+            } 
+            mFocusState = FOCUS_NOT_STARTED;
+        }
+        
     }
 
     private void updateRecordingIndicator(boolean showRecording) {
         int drawableId =
-                showRecording ? R.drawable.btn_ic_video_record
-                        : R.drawable.btn_ic_video_record_stop;
+            showRecording ? R.drawable.btn_ic_video_record
+                    : R.drawable.btn_ic_video_record_stop;
         Drawable drawable = getResources().getDrawable(drawableId);
         mShutterButton.setImageDrawable(drawable);
     }
@@ -1451,6 +1560,7 @@ public class VideoCamera extends BaseCamera
             mVideoFilename = null;
             mVideoFileDescriptor = null;
         }
+        clearFocusState(); //LEJAY: Clear focus state
         releaseMediaRecorder();  // always release media recorder
     }
 
@@ -1493,11 +1603,11 @@ public class VideoCamera extends BaseCamera
 
     private void updateLastVideo() {
         IImageList list = ImageManager.makeImageList(
-                        mContentResolver,
-                        dataLocation(),
-                        ImageManager.INCLUDE_VIDEOS,
-                        ImageManager.SORT_ASCENDING,
-                        ImageManager.CAMERA_IMAGE_BUCKET_ID);
+                mContentResolver,
+                dataLocation(),
+                ImageManager.INCLUDE_VIDEOS,
+                ImageManager.SORT_ASCENDING,
+                ImageManager.CAMERA_IMAGE_BUCKET_ID);
         int count = list.getCount();
         if (count > 0) {
             IImage image = list.getImageAt(count - 1);
@@ -1560,7 +1670,7 @@ public class VideoCamera extends BaseCamera
 
             int color = getResources().getColor(countdownRemainingTime
                     ? R.color.recording_time_remaining_text
-                    : R.color.recording_time_elapsed_text);
+                            : R.color.recording_time_elapsed_text);
 
             mRecordingTimeView.setTextColor(color);
         }
@@ -1593,7 +1703,31 @@ public class VideoCamera extends BaseCamera
 
         setCommonParameters();
         setWhiteBalance();
+        //LEJAY: Set stabilization mode
+        if(prefs.getBoolean("vid_stable_enabled", false)) {
+            mParameters.set("nv-video-stabilization", "on");
+        } else {
+            mParameters.set("nv-video-stabilization", "off");
+        }
+        //LEJAY: Set focus mode.
+        mFocusMode = mPreferences.getString(
+                CameraSettings.KEY_FOCUS_MODE,
+                getString(R.string.pref_camera_focusmode_default));
 
+        if (isSupported(mFocusMode, mParameters.getSupportedFocusModes())) {
+            mParameters.setFocusMode(mFocusMode);
+        } else if (CameraSettings.FOCUS_MODE_TOUCH.equals(mFocusMode)) {
+            mParameters.setFocusMode(Parameters.FOCUS_MODE_AUTO);
+        } else {
+            mFocusMode = mParameters.getFocusMode();
+            if (mFocusMode == null) {
+                mFocusMode = Parameters.FOCUS_MODE_AUTO;
+            }
+        }
+        clearFocusState();
+        resetFocusIndicator();
+
+        
         try {
             setCameraHardwareParameters();
         } catch (Exception e) {
@@ -1646,7 +1780,7 @@ public class VideoCamera extends BaseCamera
         boolean sizeChanged = true;
         if (mProfile != null) {
             sizeChanged = size.width != mProfile.videoFrameWidth
-                || size.height != mProfile.videoFrameHeight;
+            || size.height != mProfile.videoFrameHeight;
         }
         if (sizeChanged) {
             // It is assumed media recorder is released before
@@ -1680,7 +1814,7 @@ public class VideoCamera extends BaseCamera
         }
 
         public void onPopupWindowVisibilityChanged(final int visibility) {
-         }
+        }
     }
 
     private void onRestorePreferencesClicked() {
@@ -1736,6 +1870,7 @@ public class VideoCamera extends BaseCamera
             mHeadUpDisplay.setZoomIndex(mZoomValue);
             return true;
         }
+        
     }
 
     private void initializeZoom() {
@@ -1782,12 +1917,17 @@ public class VideoCamera extends BaseCamera
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent m) {
-        if (!super.dispatchTouchEvent(m) && mGestureDetector != null) {
-            return mGestureDetector.onTouchEvent(m);
+        boolean ret = true;
+        if (!super.dispatchTouchEvent(m)) {
+            if (mGestureDetector != null) {
+                ret = mGestureDetector.onTouchEvent(m);
+            }
+            if (mFocusGestureDetector != null) {
+                ret = mFocusGestureDetector.onTouchEvent(m);
+            }
         }
-        return true;
+        return ret;
     }
-
     private final class ZoomListener implements android.hardware.Camera.OnZoomChangeListener {
         public void onZoomChange(int value, boolean stopped, android.hardware.Camera camera) {
             Log.d(TAG, "Zoom changed: value=" + value + ". stopped=" + stopped);

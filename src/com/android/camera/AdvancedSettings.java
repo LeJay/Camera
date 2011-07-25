@@ -17,7 +17,6 @@
 
 package com.android.camera;
 
-import com.android.camera.R;
 import android.os.Bundle;
 import android.preference.CheckBoxPreference;
 import android.preference.Preference;
@@ -30,6 +29,8 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
     private static final String KEY_VOL_DOWN_SHUTTER = "vol_down_shutter_enabled";
     private static final String KEY_SEARCH_SHUTTER = "search_shutter_enabled";
     private static final String KEY_VOL_ZOOM = "vol_zoom_enabled";
+    private static final String KEY_VOL_FOCUS = "vol_focus_enabled";   //LEJAY: Manual focus for video
+    private static final String KEY_VID_STABLE = "vid_stable_enabled";   //LEJAY: Manual focus for video
     private static final String KEY_LONG_FOCUS = "long_focus_enabled";
     private static final String KEY_PRE_FOCUS = "pre_focus_enabled";
 
@@ -37,6 +38,8 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
     CheckBoxPreference volDownShutter = null;
     CheckBoxPreference searchShutter = null;
     CheckBoxPreference volZoom = null;
+    CheckBoxPreference volFocus = null;
+    CheckBoxPreference vidStable = null;
     CheckBoxPreference longFocus = null;
     CheckBoxPreference preFocus = null;
 
@@ -50,6 +53,8 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
         volDownShutter = (CheckBoxPreference) preferenceScreen.findPreference(KEY_VOL_DOWN_SHUTTER);
         searchShutter = (CheckBoxPreference) preferenceScreen.findPreference(KEY_SEARCH_SHUTTER);
         volZoom = (CheckBoxPreference) preferenceScreen.findPreference(KEY_VOL_ZOOM);
+        volFocus = (CheckBoxPreference) preferenceScreen.findPreference(KEY_VOL_FOCUS);
+        vidStable = (CheckBoxPreference) preferenceScreen.findPreference(KEY_VID_STABLE);
         longFocus = (CheckBoxPreference) preferenceScreen.findPreference(KEY_LONG_FOCUS);
         preFocus = (CheckBoxPreference) preferenceScreen.findPreference(KEY_PRE_FOCUS);
 
@@ -64,6 +69,8 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
             volDownShutter.setOnPreferenceChangeListener(this);
             searchShutter.setOnPreferenceChangeListener(this);
             volZoom.setOnPreferenceChangeListener(this);
+            volFocus.setOnPreferenceChangeListener(this);
+            vidStable.setOnPreferenceChangeListener(this);
             longFocus.setOnPreferenceChangeListener(this);
             preFocus.setOnPreferenceChangeListener(this);
         } else {
@@ -71,6 +78,8 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
             volDownShutter.setOnPreferenceChangeListener(null);
             searchShutter.setOnPreferenceChangeListener(null);
             volZoom.setOnPreferenceChangeListener(null);
+            volFocus.setOnPreferenceChangeListener(null);
+            vidStable.setOnPreferenceChangeListener(null);
             longFocus.setOnPreferenceChangeListener(null);
             preFocus.setOnPreferenceChangeListener(null);
         }
@@ -96,13 +105,13 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
     }
 
     public void checkBoxes() {
-        if (volUpShutter.isChecked() || volDownShutter.isChecked()) {
+        if (volUpShutter.isChecked() || volDownShutter.isChecked() || volFocus.isChecked()) {
             volZoom.setEnabled(false);
             volZoom.setChecked(false);
         } else {
             volZoom.setEnabled(true);
         }
-        if (volZoom.isChecked()) {
+        if (volZoom.isChecked() ||  volFocus.isChecked()) {
             volUpShutter.setEnabled(false);
             volDownShutter.setEnabled(false);
             /* no need to update checked, both must be unchecked anyway */
@@ -110,6 +119,12 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
             volUpShutter.setEnabled(true);
             volDownShutter.setEnabled(true);
         }
+        if (volZoom.isChecked() || volUpShutter.isChecked() || volDownShutter.isChecked()) {
+            volFocus.setEnabled(false);
+            volFocus.setChecked(false);
+        } else {
+            volFocus.setEnabled(true);
+        }   
 
         if (longFocus.isChecked()) {
             preFocus.setEnabled(false);
@@ -130,27 +145,36 @@ public class AdvancedSettings extends PreferenceActivity implements Preference.O
     public boolean onPreferenceChange(Preference preference, Object value) {
         CheckBoxPreference checkBox = (CheckBoxPreference)preference;
         boolean checked = (Boolean)value;
-
-        if (checkBox == volUpShutter || checkBox == volDownShutter) {
-            boolean up = checkBox == volUpShutter;
-
-            if (checked) {
-                volZoom.setEnabled(false);
-            } else {
-                boolean upChecked = up ? checked : volUpShutter.isChecked();
-                boolean downChecked = !up ? checked : volDownShutter.isChecked();
-                if (!upChecked && !downChecked) {
-                    volZoom.setEnabled(true);
-                }
-            }
-        } else if (checkBox == volZoom) {
-            volUpShutter.setEnabled(!checked);
-            volDownShutter.setEnabled(!checked);
-        } else if (checkBox == longFocus) {
-            preFocus.setEnabled(!checked);
-        } else if (checkBox == preFocus) {
-            longFocus.setEnabled(!checked);
-        }
+        checkBox.setChecked(checked);
+        checkBoxes();
+ 
+//
+//        if (checkBox == volUpShutter || checkBox == volDownShutter) {
+//            boolean up = checkBox == volUpShutter;
+//
+//            if (checked) {
+//                volZoom.setEnabled(false);
+//                volFocus.setEnabled(false);
+//            } else {
+//                boolean upChecked = up ? checked : volUpShutter.isChecked();
+//                boolean downChecked = !up ? checked : volDownShutter.isChecked();
+//                if (!upChecked && !downChecked) {
+//                    volFocus.setEnabled(true);
+//                }
+//            }
+//        } else if (checkBox == volZoom) {
+//            volUpShutter.setEnabled(!checked);
+//            volDownShutter.setEnabled(!checked);
+//       //     volFocus.setEnabled(!checked);
+//        } else if (checkBox == volFocus) {
+//            volUpShutter.setEnabled(!checked);
+//            volDownShutter.setEnabled(!checked);
+//       //     volZoom.setEnabled(!checked);
+//        } else if (checkBox == longFocus) {
+//            preFocus.setEnabled(!checked);
+//        } else if (checkBox == preFocus) {
+//            longFocus.setEnabled(!checked);
+//        }
         return true;
     }
 }

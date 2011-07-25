@@ -61,7 +61,7 @@ public class CameraSettings {
     public static final String KEY_SHARPNESS = "pref_camera_sharpness_key";
     public static final String KEY_CONTRAST = "pref_camera_contrast_key";
     public static final String KEY_SATURATION = "pref_camera_saturation_key";
-
+    
     private static final String VIDEO_QUALITY_HD = "hd";
     private static final String VIDEO_QUALITY_HIGH = "high";
     private static final String VIDEO_QUALITY_MMS = "mms";
@@ -536,9 +536,9 @@ public class CameraSettings {
     public static boolean isVideoZoomSupported(Context context, int cameraId, Parameters params) {
         boolean ret = isZoomSupported(context, cameraId);
         if (ret) {
-            // No zoom at 720P currently. Driver limitation?
-            Size size = params.getPreviewSize();
-            ret = !(size.width == 1280 && size.height == 720);
+            // No zoom at 720P currently. Driver limitation? LEJAY: What? I disable this.
+           // Size size = params.getPreviewSize();
+           // ret = !(size.width == 1280 && size.height == 720);
         }
         return ret;
     }
