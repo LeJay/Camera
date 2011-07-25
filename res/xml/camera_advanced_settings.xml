@@ -56,6 +56,23 @@
                     android:title="@string/pref_camera_vol_zoom"
                     android:summary="@string/pref_camera_vol_zoom_summary"
                     android:persistent="true" />
+    <PreferenceCategory
+            android:title="@string/pref_camera_vol_focus_title"
+            />
+            <CheckBoxPreference
+                    android:key="vol_focus_enabled"
+                    android:title="@string/pref_camera_vol_focus"
+                    android:summary="@string/pref_camera_vol_focus_summary"
+                    android:persistent="true" />
+    <PreferenceCategory
+            android:title="@string/pref_camera_vid_stable_title"
+            />
+            <CheckBoxPreference
+                    android:key="vid_stable_enabled"
+                    android:title="@string/pref_camera_vid_stable"
+                    android:summary="@string/pref_camera_vid_stable_summary"
+                    android:persistent="true" />
+
 
     <PreferenceCategory
             android:title="@string/pref_camera_settings_focus_title"

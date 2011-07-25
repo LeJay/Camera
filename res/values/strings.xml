@@ -202,6 +202,16 @@
     <string name="pref_camera_vol_zoom">Volume Buttons Zoom</string>
     <string name="pref_camera_vol_zoom_summary">Volume up/down zoom in/out respectively</string>
 
+    <!-- More Settings screen, focus button title -->
+    <string name="pref_camera_vol_focus_title">Volume Manual Focus</string>
+    <string name="pref_camera_vol_focus">Volume Buttons Manual Focus</string>
+    <string name="pref_camera_vol_focus_summary">Manual focus with volume</string>
+
+    <!-- More Settings screen, video stable button title -->
+    <string name="pref_camera_vid_stable_title">Stabilization</string>
+    <string name="pref_camera_vid_stable">Video Stabilization</string>
+    <string name="pref_camera_vid_stable_summary">Enables stabilization of video recordings</string>
+
     <!-- More Settings screen, search button title -->
     <string name="pref_camera_search_shutter_title">Search Shutter</string>
 
