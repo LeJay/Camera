@@ -71,30 +71,40 @@ public abstract class BaseCamera extends NoSearchActivity
         mPreviewFrameLayout.setOnSizeChangedListener(this);
         mPreviewRect = null;
     }
-
+    
     protected void setCommonParameters() {
-        // Set color effect parameter.
+        setColorEffect();
+        setSharpness();
+        setContrast();
+        setSaturation();
+        setExposure();
+    }
+
+    private void setColorEffect() {
         String colorEffect = mPreferences.getString(CameraSettings.KEY_COLOR_EFFECT,
                 getString(R.string.pref_camera_coloreffect_default));
         if (isSupported(colorEffect, mParameters.getSupportedColorEffects())) {
             mParameters.setColorEffect(colorEffect);
         }
+    }
 
-        // Set sharpness parameter.
+    private void setSharpness() {
         if (mParameters.getMaxSharpness() > 0) {
             String sharpness = mPreferences.getString(CameraSettings.KEY_SHARPNESS,
                     String.valueOf(mParameters.getDefaultSharpness()));
             mParameters.setSharpness(Integer.valueOf(sharpness));
         }
+    }
 
-        // Set contrast parameter.
+    private void setContrast() {
         if (mParameters.getMaxContrast() > 0) {
             String contrast = mPreferences.getString(CameraSettings.KEY_CONTRAST,
                     String.valueOf(mParameters.getDefaultContrast()));
             mParameters.setContrast(Integer.valueOf(contrast));
         }
+    }
 
-        // Set saturation parameter.
+    private void setSaturation() {
         if (mParameters.getMaxSaturation() > 0) {
             String saturation = mPreferences.getString(CameraSettings.KEY_SATURATION,
                     String.valueOf(mParameters.getDefaultSaturation()));
@@ -112,6 +122,79 @@ public abstract class BaseCamera extends NoSearchActivity
             if (whiteBalance == null) {
                 whiteBalance = Parameters.WHITE_BALANCE_AUTO;
             }
+        }
+    }
+    //LEJAY: Setting nv contrast
+    protected void setNvContrast() {
+        String nvContrast = mPreferences.getString(CameraSettings.KEY_NV_CONTRAST,
+                getString(R.string.pref_camera_nv_contrast_default));
+       // if (isSupported(nvContrast, mParameters.getSupportedNvContrast())) {
+            mParameters.set("nv-contrast", nvContrast);
+     //   } else {
+     //       nvContrast = mParameters.getNvContrast();
+     //       if (nvContrast == null) {
+      //          nvContrast = "normal";
+     //       }
+     //   }
+    }
+    
+    //Set exposure. Refactored.
+    protected void setExposure() {
+        String exposure = mPreferences.getString(CameraSettings.KEY_EXPOSURE,
+                CameraSettings.EXPOSURE_DEFAULT_VALUE);
+        try {
+            float value = Float.parseFloat(exposure);
+            int max = mParameters.getMaxExposureCompensation();
+            int min = mParameters.getMinExposureCompensation();
+            if (value >= min && value <= max) {
+                mParameters.set("exposure-compensation", exposure);
+            } else {
+                Log.w(LOG_TAG, "invalid exposure range: " + exposure);
+            }
+        } catch (NumberFormatException e) {
+            Log.w(LOG_TAG, "invalid exposure: " + exposure);
+        }
+    }
+    
+    //LEJAY: Set focus mode. Refactored.
+    protected void setFocusMode() {
+       
+        mFocusMode = mPreferences.getString(
+                CameraSettings.KEY_FOCUS_MODE,
+                getString(R.string.pref_camera_focusmode_default));
+
+        if (isSupported(mFocusMode, mParameters.getSupportedFocusModes())) {
+            mParameters.setFocusMode(mFocusMode);
+        } else if (CameraSettings.FOCUS_MODE_TOUCH.equals(mFocusMode)) {
+            mParameters.setFocusMode(Parameters.FOCUS_MODE_AUTO);
+        } else {
+            mFocusMode = mParameters.getFocusMode();
+            if (mFocusMode == null) {
+                mFocusMode = Parameters.FOCUS_MODE_AUTO;
+            }
+        }
+        clearFocusState();
+        resetFocusIndicator();
+
+        clearTouchFocusAEC();
+    }
+    //LEJAY: Refactored
+    protected void clearFocusState() {
+        mFocusState = FOCUS_NOT_STARTED;
+        updateFocusIndicator();
+    }
+    //LEJAY: Refactored
+    protected void updateFocusIndicator() {
+        if (mFocusRectangle == null) return;
+
+        if (mFocusState == FOCUSING || mFocusState == FOCUSING_SNAP_ON_FINISH) {
+            mFocusRectangle.showStart();
+        } else if (mFocusState == FOCUS_SUCCESS) {
+            mFocusRectangle.showSuccess();
+        } else if (mFocusState == FOCUS_FAIL) {
+            mFocusRectangle.showFail();
+        } else {
+            mFocusRectangle.clear();
         }
     }
 

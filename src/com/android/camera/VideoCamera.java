@@ -395,27 +395,7 @@ Switcher.OnSwitchListener {
                 return;
             }
         } catch (InterruptedException ex) {
-           
-        }
-        
-        try {
-            startPreviewThread.join();
-            if (mStartPreviewFail) {
-                showCameraErrorAndFinish();
-                return;
-            }
-        } catch (InterruptedException ex) {
-           
-        }
-        
-        try {
-            startPreviewThread.join();
-            if (mStartPreviewFail) {
-                showCameraErrorAndFinish();
-                return;
-            }
-        } catch (InterruptedException ex) {
-           
+           // ignore
         }
 
         initializeZoom();
@@ -431,24 +411,6 @@ Switcher.OnSwitchListener {
         initializeTouchFocus();
         clearFocusState();
         resetFocusIndicator();
-     //   setCameraParameters();
-    }
-    private void clearFocusState() {
-        mFocusState = FOCUS_NOT_STARTED;
-        updateFocusIndicator();
-    }
-    private void updateFocusIndicator() { //LEJAY: Adding focus indicator control
-        if (mFocusRectangle == null) return;
-
-        if (mFocusState == FOCUSING || mFocusState == FOCUSING_SNAP_ON_FINISH) {
-            mFocusRectangle.showStart();
-        } else if (mFocusState == FOCUS_SUCCESS) {
-            mFocusRectangle.showSuccess();
-        } else if (mFocusState == FOCUS_FAIL) {
-            mFocusRectangle.showFail();
-        } else {
-            mFocusRectangle.clear();
-        }
     }
 
     private void changeHeadUpDisplayState() {
@@ -746,6 +708,7 @@ Switcher.OnSwitchListener {
         changeHeadUpDisplayState();
 
         updateThumbnailButton();
+        setCameraHardwareParameters(); // LEJAY: Might help odd zoom behaviour when resuming app
     }
 
     private void setPreviewDisplay(SurfaceHolder holder) {
@@ -1369,13 +1332,11 @@ Switcher.OnSwitchListener {
         sendBroadcast(i);
     }
     private void startVideoRecording() {
-        if (mFocusState == FOCUSING) return; 
+        if (mFocusState == FOCUSING) return; //LEJAY: Don't try to record while focusing
         if (mFocusMode.equals(Parameters.FOCUS_MODE_AUTO)) { //LEJAY: Autofocus enabled?
-                // mHeadUpDisplay.setEnabled(false);
-                Log.v(TAG, "Start autofocus.");
-                mFocusStartTime = System.currentTimeMillis();
+                Log.v(TAG, "Start video autofocus.");
                 mFocusState = FOCUSING;
-               // updateFocusIndicator(); LEJAY: Doesnt work right
+               // updateFocusIndicator(); LEJAY: Doesn't work right
                 mCameraDevice.autoFocus(new AutoFocusCallback());
         } else {
             startVideoRecording_for_real();
@@ -1388,8 +1349,11 @@ Switcher.OnSwitchListener {
             Log.v(TAG, "Storage issue, ignore the start request");
             return;
         }
-
+        mParameters.setZoom(mZoomValue); //LEJAY: tmp debugging stuff to fix zoom reset
+        mParameters.setExposureCompensation(0); // LEJAY: Try fix exposure
+        
         CameraSettings.setContinuousAf(mParameters, true);
+        
         setCameraHardwareParameters();
         initializeRecorder();
         if (mMediaRecorder == null) {
@@ -1420,22 +1384,15 @@ Switcher.OnSwitchListener {
         keepScreenOn();
         clearFocusState(); //LEJAY Focus indicator clearing
     }
-    private long mFocusStartTime;
-    private long mFocusCallbackTime;
-    public long mAutoFocusTime;
 
-    private final class AutoFocusCallback
+    private final class AutoFocusCallback // LEJAY: Simple callback func. Start recording if success.
     implements android.hardware.Camera.AutoFocusCallback {
         public void onAutoFocus(
                 boolean focused, android.hardware.Camera camera) {
-            mFocusCallbackTime = System.currentTimeMillis();
-            mAutoFocusTime = mFocusCallbackTime - mFocusStartTime;
-            Log.e(TAG, "<PROFILE> mAutoFocusTime = " + mAutoFocusTime + "ms");
-
             if (focused) {
                 startVideoRecording_for_real();
             } 
-            mFocusState = FOCUS_NOT_STARTED;
+            clearFocusState();
         }
         
     }
@@ -1685,8 +1642,23 @@ Switcher.OnSwitchListener {
         }
         mParameters.setPreviewSize(mProfile.videoFrameWidth, mProfile.videoFrameHeight);
         mParameters.setPreviewFrameRate(mProfile.videoFrameRate);
+        setVideoFlashMode();
+        setCommonParameters();
+        setWhiteBalance();
+        setNvContrast();
+        setFocusMode();
+        setVideoStabilization();
 
-        // Set flash mode.
+        try {
+            setCameraHardwareParameters();
+        } catch (Exception e) {
+            // Some phones with dual cameras fail to report the actual parameters
+            // on the FFC. Filtering is device-specific but would be better.
+            Log.e(TAG, "Error setting parameters: " + e.getMessage());
+        }
+    }
+
+    private void setVideoFlashMode() {
         String flashMode = mPreferences.getString(
                 CameraSettings.KEY_VIDEOCAMERA_FLASH_MODE,
                 getString(R.string.pref_camera_video_flashmode_default));
@@ -1700,40 +1672,13 @@ Switcher.OnSwitchListener {
                         R.string.pref_camera_flashmode_no_flash);
             }
         }
+    }
 
-        setCommonParameters();
-        setWhiteBalance();
-        //LEJAY: Set stabilization mode
+    private void setVideoStabilization() {
         if(prefs.getBoolean("vid_stable_enabled", false)) {
             mParameters.set("nv-video-stabilization", "on");
         } else {
             mParameters.set("nv-video-stabilization", "off");
-        }
-        //LEJAY: Set focus mode.
-        mFocusMode = mPreferences.getString(
-                CameraSettings.KEY_FOCUS_MODE,
-                getString(R.string.pref_camera_focusmode_default));
-
-        if (isSupported(mFocusMode, mParameters.getSupportedFocusModes())) {
-            mParameters.setFocusMode(mFocusMode);
-        } else if (CameraSettings.FOCUS_MODE_TOUCH.equals(mFocusMode)) {
-            mParameters.setFocusMode(Parameters.FOCUS_MODE_AUTO);
-        } else {
-            mFocusMode = mParameters.getFocusMode();
-            if (mFocusMode == null) {
-                mFocusMode = Parameters.FOCUS_MODE_AUTO;
-            }
-        }
-        clearFocusState();
-        resetFocusIndicator();
-
-        
-        try {
-            setCameraHardwareParameters();
-        } catch (Exception e) {
-            // Some phones with dual cameras fail to report the actual parameters
-            // on the FFC. Filtering is device-specific but would be better.
-            Log.e(TAG, "Error setting parameters: " + e.getMessage());
         }
     }
 

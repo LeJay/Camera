@@ -60,6 +60,7 @@ public class CameraSettings {
     public static final String KEY_ANTIBANDING = "pref_camera_antibanding_key";
     public static final String KEY_SHARPNESS = "pref_camera_sharpness_key";
     public static final String KEY_CONTRAST = "pref_camera_contrast_key";
+    public static final String KEY_NV_CONTRAST = "pref_camera_nv_contrast_key";
     public static final String KEY_SATURATION = "pref_camera_saturation_key";
     
     private static final String VIDEO_QUALITY_HD = "hd";
@@ -156,6 +157,7 @@ public class CameraSettings {
         ListPreference videoQuality = group.findPreference(KEY_VIDEO_QUALITY);
         ListPreference pictureSize = group.findPreference(KEY_PICTURE_SIZE);
         ListPreference whiteBalance =  group.findPreference(KEY_WHITE_BALANCE);
+        ListPreference nvContrast =  group.findPreference(KEY_NV_CONTRAST);
         ListPreference colorEffect = group.findPreference(KEY_COLOR_EFFECT);
         ListPreference sceneMode = group.findPreference(KEY_SCENE_MODE);
         ListPreference flashMode = group.findPreference(KEY_FLASH_MODE);
@@ -172,6 +174,27 @@ public class CameraSettings {
 
         // Since the screen could be loaded from different resources, we need
         // to check if the preference is available here
+        filterVideoSettings(group, videoQuality);
+        
+        // Filter out unsupported settings / options
+        filterPictureSize(group, pictureSize);
+        filterWhiteBalance(group, whiteBalance);
+       // filterNvContrast(group, nvContrast);
+        filterColorEffect(group, colorEffect);
+        filterSceneMode(group, sceneMode);
+        filterFlashMode(group, flashMode);
+        filterFocusMode(group, focusMode);
+        filterVideoFlashMode(group, videoFlashMode);
+        if (exposure != null) buildExposureCompensation(group, exposure);
+        if (cameraId != null) buildCameraId(group, cameraId);
+        filterISO(group, iso);
+        filterLensShade(group, lensShade);
+        filterAntiBanding(group, antiBanding);
+        filterAutoExposure(group, autoExposure);
+    }
+
+    private void filterVideoSettings(PreferenceGroup group,
+            ListPreference videoQuality) {
         if (videoQuality != null) {
             // Modify video duration settings.
             // The first entry is for MMS video duration, and we need to fill
@@ -196,20 +219,26 @@ public class CameraSettings {
                 filterUnsupportedOptions(group, videoQuality, supported);
             }
         }
+    }
 
-        // Filter out unsupported settings / options
-        if (pictureSize != null) {
-            final List<String> pictureSizes = sizeListToStringList(mParameters.getSupportedPictureSizes());
-            final String filteredSizes = mContext.getResources().getString(R.string.filtered_pictureSizes);
-            if (filteredSizes != null && filteredSizes.length() > 0) {
-                pictureSizes.removeAll(Arrays.asList(filteredSizes.split(",")));
-            }
-            filterUnsupportedOptions(group, pictureSize, pictureSizes);
-        }
+    private void filterWhiteBalance(PreferenceGroup group,
+            ListPreference whiteBalance) {
         if (whiteBalance != null) {
             filterUnsupportedOptions(group,
                     whiteBalance, mParameters.getSupportedWhiteBalance());
         }
+    }
+
+    private void filterNvContrast(PreferenceGroup group,
+            ListPreference nvContrast) {
+        if (nvContrast != null) {
+            filterUnsupportedOptions(group,
+                    nvContrast, mParameters.getSupportedNvContrast());
+        }
+    }
+
+    private void filterColorEffect(PreferenceGroup group,
+            ListPreference colorEffect) {
         if (colorEffect != null) {
             if (isFrontFacingCamera()) {
                 String supportedEffects = mContext.getResources().getString(R.string.ffc_supportedEffects);
@@ -222,15 +251,23 @@ public class CameraSettings {
                         colorEffect, mParameters.getSupportedColorEffects());
             }
         }
+    }
+
+    private void filterSceneMode(PreferenceGroup group, ListPreference sceneMode) {
         if (sceneMode != null) {
             filterUnsupportedOptions(group,
                     sceneMode, mParameters.getSupportedSceneModes());
         }
+    }
+
+    private void filterFlashMode(PreferenceGroup group, ListPreference flashMode) {
         if (flashMode != null) {
             filterUnsupportedOptions(group,
                     flashMode, mParameters.getSupportedFlashModes());
         }
+    }
 
+    private void filterFocusMode(PreferenceGroup group, ListPreference focusMode) {
         if (focusMode != null) {
             if (isFrontFacingCamera() && !mContext.getResources().getBoolean(R.bool.ffc_canFocus)) {
                 filterUnsupportedOptions(group, focusMode, new ArrayList<String>());
@@ -242,29 +279,55 @@ public class CameraSettings {
                 filterUnsupportedOptions(group, focusMode, focusModes);
             }
         }
+    }
 
+    private void filterVideoFlashMode(PreferenceGroup group, ListPreference videoFlashMode) {
         if (videoFlashMode != null) {
             filterUnsupportedOptions(group,
                     videoFlashMode, mParameters.getSupportedFlashModes());
         }
-        if (exposure != null) buildExposureCompensation(group, exposure);
-        if (cameraId != null) buildCameraId(group, cameraId);
+    }
+
+    private void filterISO(PreferenceGroup group, ListPreference iso) {
         if (iso != null) {
             filterUnsupportedOptions(group,
                     iso, mParameters.getSupportedIsoValues());
         }
+    }
+
+    private void filterLensShade(PreferenceGroup group, ListPreference lensShade) {
         if (lensShade!= null) {
             filterUnsupportedOptions(group,
                     lensShade, mParameters.getSupportedLensShadeModes());
         }
-         if (antiBanding != null) {
+    }
+
+    private void filterAntiBanding(PreferenceGroup group,
+            ListPreference antiBanding) {
+        if (antiBanding != null) {
              filterUnsupportedOptions(group,
                      antiBanding, mParameters.getSupportedAntibanding());
          }
-         if (autoExposure != null) {
+    }
+
+    private void filterAutoExposure(PreferenceGroup group,
+            ListPreference autoExposure) {
+        if (autoExposure != null) {
              filterUnsupportedOptions(group,
                      autoExposure, mParameters.getSupportedAutoexposure());
          }
+    }
+
+    private void filterPictureSize(PreferenceGroup group,
+            ListPreference pictureSize) {
+        if (pictureSize != null) {
+            final List<String> pictureSizes = sizeListToStringList(mParameters.getSupportedPictureSizes());
+            final String filteredSizes = mContext.getResources().getString(R.string.filtered_pictureSizes);
+            if (filteredSizes != null && filteredSizes.length() > 0) {
+                pictureSizes.removeAll(Arrays.asList(filteredSizes.split(",")));
+            }
+            filterUnsupportedOptions(group, pictureSize, pictureSizes);
+        }
     }
 
     private boolean checkTouchFocus() {
